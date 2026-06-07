@@ -34,7 +34,12 @@ class VelocityFeatures:
 
 class FeatureStore:
     def __init__(self, redis_url: str):
-        self._r = redis.from_url(redis_url, decode_responses=True)
+        self._r = redis.from_url(
+            redis_url,
+            decode_responses=True,
+            socket_connect_timeout=5,
+            socket_timeout=5,
+        )
 
     def get_and_update(self, user_id: str, amount: float) -> VelocityFeatures:
         """

@@ -31,11 +31,20 @@ from schemas import AggregateMetrics, PredictionResponse, RecentPrediction, Tran
 
 DATABASE_URL = os.environ["DATABASE_URL"]
 REDIS_URL    = os.environ["REDIS_URL"]
-MODEL_PATH   = Path(os.environ.get("MODEL_PATH", "/app/artifacts/model.pkl"))
+
+# Resolve model path relative to this file so it works regardless of CWD.
+# Falls back to MODEL_PATH env var if set explicitly (e.g. Docker).
+_default_model = Path(__file__).parent.parent / "model" / "artifacts" / "model.pkl"
+MODEL_PATH = Path(os.environ.get("MODEL_PATH", _default_model))
 
 _artifact: dict = {}
 _store: FeatureStore | None = None
 _db_conn = None
+
+
+def _connect_db():
+    """Separate function so we can retry without restarting the app."""
+    return psycopg2.connect(DATABASE_URL, connect_timeout=10)
 
 
 @asynccontextmanager
@@ -46,7 +55,7 @@ async def lifespan(app: FastAPI):
         _artifact = pickle.load(f)
 
     _store   = FeatureStore(REDIS_URL)
-    _db_conn = psycopg2.connect(DATABASE_URL)
+    _db_conn = _connect_db()
     psycopg2.extras.register_uuid()
 
     yield
