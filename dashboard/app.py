@@ -100,14 +100,14 @@ while True:
                 WHERE processed_at >= NOW() - INTERVAL '5 minutes'
             """)
             if not dist_df.empty:
-                st.bar_chart(
+                counts = (
                     dist_df["fraud_prob"]
                     .pipe(pd.cut, bins=20)
                     .value_counts()
                     .sort_index()
-                    .rename("count"),
-                    height=220,
                 )
+                counts.index = [str(i) for i in counts.index]
+                st.bar_chart(counts.rename("count"), height=220)
             else:
                 st.info("Waiting for data...")
 
