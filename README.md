@@ -2,6 +2,8 @@
 
 End-to-end system for scoring card transactions as they arrive. Transactions stream through Kafka, a consumer enriches each one with user velocity features from Redis, runs XGBoost inference, and writes decisions to PostgreSQL. A FastAPI endpoint handles cases where a synchronous score is needed before the async pipeline can return. A Streamlit dashboard shows what the system is doing in real time.
 
+**Live:** [API](https://fraud-detection-pipeline-pdv9.onrender.com/docs) · [Dashboard](https://fraud-detection-pipeline.streamlit.app) *(Render free tier — first request may take ~30s to wake)*
+
 **Stack:** Python · Kafka · Redis · PostgreSQL · XGBoost · FastAPI · Streamlit · Docker Compose
 
 ---
