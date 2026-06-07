@@ -1,8 +1,8 @@
 # dataset — too large for git, download from Kaggle
 data/creditcard.csv
 
-# trained model artifact
-model/artifacts/model.pkl
+# dataset — not in git, generate locally
+# model artifact is committed so Render can use it without a build-time training step
 
 # env
 .env

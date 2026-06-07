@@ -68,7 +68,39 @@ Typical results on the held-out test set: **PR-AUC ~0.85**, recall ~0.82 at 0.5 
 
 ---
 
-## Running it
+## Deployment (free tier)
+
+The full Kafka pipeline is too resource-heavy for free hosting (ZooKeeper + Kafka alone need ~1.5GB RAM). The deployed version runs the sync scoring API and dashboard — the async pipeline architecture is documented below and runs locally.
+
+**Services used:**
+- [Neon](https://neon.tech) — serverless Postgres (free tier)
+- [Upstash](https://upstash.com) — managed Redis (free tier)
+- [Render](https://render.com) — API deployment (free web service)
+- [Streamlit Cloud](https://streamlit.io/cloud) — dashboard (free)
+
+**Steps:**
+
+**1. Neon — create a database**
+- Sign up at neon.tech, create a project, copy the connection string
+- Run `init.sql` against it once: `psql <connection-string> -f init.sql`
+
+**2. Upstash — create a Redis instance**
+- Sign up at upstash.com → Redis → Create database
+- Copy the `rediss://` connection URL
+
+**3. Render — deploy the API**
+- Connect your GitHub repo, select "New Web Service"
+- Render auto-detects `render.yaml` — just fill in `DATABASE_URL` and `REDIS_URL` environment variables
+- After deploy, hit `POST /demo/seed` once to populate the database: `curl -X POST https://<your-render-url>/demo/seed`
+
+**4. Streamlit Cloud — deploy the dashboard**
+- Go to share.streamlit.io → New app
+- Repo: `vinay23is/fraud-detection-pipeline`, branch: `main`, main file: `dashboard/app.py`
+- Add secret: `DATABASE_URL = "<neon-connection-string>"`
+
+---
+
+## Running locally
 
 **1. Get the dataset**
 ```bash

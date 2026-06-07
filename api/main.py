@@ -166,6 +166,39 @@ def metrics(hours: int = Query(default=1, ge=1, le=168)):
     )
 
 
+@app.post("/demo/seed", summary="Seed dashboard with synthetic predictions (demo only)")
+def demo_seed(n: int = Query(default=500, le=2000)):
+    """
+    Generates n synthetic transactions through the full scoring pipeline and
+    writes them to the database. Use this to populate the dashboard on a fresh
+    deployment before real traffic arrives.
+    """
+    if not _artifact:
+        raise HTTPException(503, "Model not loaded")
+
+    rng = np.random.default_rng()
+    inserted = 0
+
+    for _ in range(n):
+        # V1-V28 are PCA outputs — standard normal is the right distribution
+        features = {f"V{i}": float(rng.normal()) for i in range(1, 29)}
+        # Amount: lognormal, clipped to a realistic card transaction range
+        amount = round(float(min(np.exp(rng.normal(3.8, 1.4)), 4999.99)), 2)
+        user_id = f"u{rng.integers(0, 800):04d}"
+        time_offset = float(rng.uniform(0, 172800))
+
+        req = TransactionRequest(
+            user_id=user_id,
+            amount=amount,
+            features=features,
+            time_offset=time_offset,
+        )
+        predict(req)
+        inserted += 1
+
+    return {"seeded": inserted}
+
+
 @app.get("/predictions", response_model=list[RecentPrediction])
 def recent_predictions(limit: int = Query(default=50, le=200), fraud_only: bool = False):
     """Most recent predictions, optionally filtered to flagged ones only."""
