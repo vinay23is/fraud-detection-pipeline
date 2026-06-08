@@ -14,7 +14,8 @@ import psycopg2
 import psycopg2.extras
 import streamlit as st
 
-DATABASE_URL = os.environ["DATABASE_URL"]
+# Streamlit Cloud injects secrets via st.secrets; fall back to env var for local/Docker
+DATABASE_URL = st.secrets.get("DATABASE_URL") or os.environ["DATABASE_URL"]
 
 st.set_page_config(
     page_title="Fraud Detection — Live",
