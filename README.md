@@ -68,6 +68,21 @@ Kafka partitions transactions by `user_id`. This means all events for a given us
 
 Typical results on the held-out test set: **PR-AUC ~0.85**, recall ~0.82 at 0.5 threshold.
 
+For the full training/evaluation contract, feature parity notes, inference contract, and limitations, see [docs/model-card.md](docs/model-card.md).
+
+---
+
+## Engineering Proof
+
+| Area | Implementation |
+|---|---|
+| Training/serving parity | `feature_cols` are saved in the model artifact and used by both the API and Kafka processor |
+| Online feature store | Redis sorted sets compute `tx_count_1h`, `tx_count_24h`, and `avg_amount_7d` before each write |
+| Streaming correctness | Kafka partitions by `user_id` so each user's events are processed in order |
+| API contract | FastAPI/Pydantic validates request shape and exposes `/predict`, `/metrics`, `/predictions`, `/model`, and `/health` |
+| Test coverage | `pytest` + `fakeredis` validates feature-store behavior without external infrastructure |
+| CI | GitHub Actions installs dependencies and runs the test suite on pushes and pull requests |
+
 ---
 
 ## Deployment (free tier)
