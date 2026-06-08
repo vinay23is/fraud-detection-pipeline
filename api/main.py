@@ -13,6 +13,7 @@ FastAPI service — two responsibilities:
 
 import os
 import pickle
+import time
 import uuid
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -21,7 +22,7 @@ import numpy as np
 import psycopg2
 import psycopg2.extras
 import redis
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 
 from feature_store import FeatureStore
@@ -78,6 +79,15 @@ app.add_middleware(
 )
 
 
+@app.middleware("http")
+async def add_timing_header(request: Request, call_next):
+    t0 = time.perf_counter()
+    response = await call_next(request)
+    ms = (time.perf_counter() - t0) * 1000
+    response.headers["X-Response-Time-Ms"] = f"{ms:.1f}"
+    return response
+
+
 # ── helpers ──────────────────────────────────────────────────────────────────
 
 def _build_feature_vector(req: TransactionRequest, velocity) -> np.ndarray:
@@ -95,6 +105,20 @@ def _build_feature_vector(req: TransactionRequest, velocity) -> np.ndarray:
 @app.get("/health")
 def health():
     return {"status": "ok", "model_version": _artifact.get("version")}
+
+
+@app.get("/model")
+def model_info():
+    """Artifact metadata — version hash, evaluation metric, decision threshold."""
+    if not _artifact:
+        raise HTTPException(503, "Model not loaded")
+    return {
+        "version":       _artifact["version"],
+        "pr_auc":        _artifact["pr_auc"],
+        "threshold":     _artifact["threshold"],
+        "feature_count": len(_artifact["feature_cols"]),
+        "features":      _artifact["feature_cols"],
+    }
 
 
 @app.post("/predict", response_model=PredictionResponse)
@@ -178,9 +202,12 @@ def metrics(hours: int = Query(default=1, ge=1, le=168)):
 @app.post("/demo/seed", summary="Seed dashboard with synthetic predictions (demo only)")
 def demo_seed(n: int = Query(default=500, le=2000)):
     """
-    Generates n synthetic transactions through the full scoring pipeline and
-    writes them to the database. Use this to populate the dashboard on a fresh
-    deployment before real traffic arrives.
+    Generates n synthetic transactions and scores them through the real pipeline.
+
+    Roughly 8% are generated with fraud-like PCA feature patterns so the
+    dashboard shows non-zero fraud rates. The patterns are based on the
+    feature distributions observed in the training data: fraud transactions
+    cluster around extreme negative values in V14 and V4.
     """
     if not _artifact:
         raise HTTPException(503, "Model not loaded")
@@ -188,19 +215,28 @@ def demo_seed(n: int = Query(default=500, le=2000)):
     rng = np.random.default_rng()
     inserted = 0
 
-    for _ in range(n):
-        # V1-V28 are PCA outputs — standard normal is the right distribution
-        features = {f"V{i}": float(rng.normal()) for i in range(1, 29)}
-        # Amount: lognormal, clipped to a realistic card transaction range
-        amount = round(float(min(np.exp(rng.normal(3.8, 1.4)), 4999.99)), 2)
-        user_id = f"u{rng.integers(0, 800):04d}"
-        time_offset = float(rng.uniform(0, 172800))
+    for i in range(n):
+        is_fraud_pattern = rng.random() < 0.08
 
+        if is_fraud_pattern:
+            # Approximate the fraud cluster in PCA space.
+            # V14 and V4 carry the most fraud signal in this dataset —
+            # fraud transactions tend to have V14 << 0 and V4 < 0.
+            features = {f"V{j}": float(rng.normal()) for j in range(1, 29)}
+            features["V14"] = float(rng.normal(-7.0, 1.5))
+            features["V4"]  = float(rng.normal(-4.0, 1.0))
+            features["V11"] = float(rng.normal(-3.0, 1.0))
+            amount = round(float(rng.uniform(1.0, 500.0)), 2)
+        else:
+            features = {f"V{j}": float(rng.normal()) for j in range(1, 29)}
+            amount = round(float(min(np.exp(rng.normal(3.8, 1.4)), 4999.99)), 2)
+
+        user_id = f"u{rng.integers(0, 800):04d}"
         req = TransactionRequest(
             user_id=user_id,
             amount=amount,
             features=features,
-            time_offset=time_offset,
+            time_offset=float(rng.uniform(0, 172800)),
         )
         predict(req)
         inserted += 1
